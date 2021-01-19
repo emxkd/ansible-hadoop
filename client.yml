@@ -1,0 +1,60 @@
+- name: "ip"
+  vars_prompt:
+          - name: nnip
+            prompt: "Enter ip of namenode"
+            private: no 
+
+
+  hosts : client
+  tasks:
+  - name: Copy java jdk file
+    copy:
+            src: /root/jdk-8u171-linux-x64.rpm
+            dest: /root
+    register: x
+
+  - name: Copy Hadoop software
+    copy:
+            src: /root/hadoop-1.2.1-1.x86_64.rpm
+            dest: /root
+
+  - name: Installing hadoop and jdk
+    command: rpm -i /root/{{ item }}
+    loop:
+            - "jdk-8u171-linux-x64.rpm"
+            - "hadoop-1.2.1-1.x86_64.rpm --force"
+    when: x.changed == True
+
+  - name: Configuring core-site.xml
+    blockinfile:
+            path: /etc/hadoop/core-site.xml
+            insertafter: "<configuration>"
+            block: |
+                   <property>
+                   <name>fs.default.name</name>
+                   <value>hdfs://{{ nnip }}:9001</value>
+                   </property>
+
+
+  - name: Copying files to client node
+    copy:
+            src: "/root/client-file.txt"
+            dest: "/root/"
+    register: y
+
+  - name: uploading files
+    shell: "hadoop fs -put /root/client-file.txt /"
+    when: y.changed == True
+
+  - name: Configuring firewall
+    firewalld:
+            port: 9001/tcp
+            permanent: yes
+            state: enabled
+
+  - name: Report
+    command: "hadoop dfsadmin -report"
+    register: hadoop_report
+
+  - debug:
+          var: hadoop_report.stdout
