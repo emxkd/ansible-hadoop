@@ -1,0 +1,65 @@
+- hosts : namenode
+  tasks:
+  - name: Copy java jdk file
+    copy:
+            src: /root/jdk-8u171-linux-x64.rpm
+            dest: /root
+    register: x
+
+  - name: Copy Hadoop software
+    copy:
+            src: /root/hadoop-1.2.1-1.x86_64.rpm
+            dest: /root
+
+  - name: Installing hadoop and jdk
+    command: rpm -i /root/{{ item }}
+    loop:
+            - "jdk-8u171-linux-x64.rpm"
+            - "hadoop-1.2.1-1.x86_64.rpm --force"
+    when: x.changed == True
+  - name: Creating directory
+    file:
+            path: /nn
+            state: directory
+    register: y
+
+  - name: Configuring hdfs-site.xml
+    blockinfile:
+            path: /etc/hadoop/hdfs-site.xml
+            insertafter: "<configuration>"
+            block: |
+                   <property>
+                   <name>dfs.name.dir</name>
+                   <value>/nn</value>
+                   </property> 
+
+  - name: Configuring core-site.xml
+    blockinfile:
+            path: /etc/hadoop/core-site.xml
+            insertafter: "<configuration>"
+            block: |
+                   <property>
+                   <name>fs.default.name</name>
+                   <value>hdfs://192.168.43.2:9001</value>
+                   </property>
+
+  - name: Formatting namenode
+    shell: hadoop namenode -format -nonInteractive -force
+    when: y.changed == True
+
+  - name: Configuring firewall 
+    firewalld:
+            port: 9001/tcp
+            permanent: yes
+            state: enabled
+            immediate: yes
+
+  - name: Starting namenode
+    command: "hadoop-daemon.sh start namenode"
+
+  - name: Checking namenode
+    command: "jps"
+    register: jps
+
+  - debug:
+          var: jps.stdout
